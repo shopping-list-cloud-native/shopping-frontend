@@ -1,0 +1,616 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Shopping List API Tester</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+        .step {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            background: #fafafa;
+        }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .response {
+            margin-top: 10px;
+            padding: 10px;
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            white-space: pre-wrap;
+            font-family: monospace;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        .success {
+            border-color: #28a745;
+            background: #d4edda;
+        }
+        .error {
+            border-color: #dc3545;
+            background: #f8d7da;
+        }
+        .status {
+            margin-top: 10px;
+            font-weight: bold;
+        }
+        .token-display {
+            background: #e9ecef;
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+            font-family: monospace;
+            word-break: break-all;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Shopping List API Tester</h1>
+        <p>Interfață pentru testarea API-urilor aplicației de liste de cumpărături</p>
+
+        <div id="global-status" class="status">Status: Gata pentru testare</div>
+
+        <div class="step">
+            <h3>Pas 1: Înregistrare Utilizatori</h3>
+            <button onclick="registerUsers()">Înregistrează Utilizatorii</button>
+            <div id="register-response" class="response" style="display:none;"></div>
+        </div>
+
+        <div class="step">
+            <h3>Pas 2: Login Utilizator 1</h3>
+            <button onclick="loginUser1()">Login User1</button>
+            <div id="login1-response" class="response" style="display:none;"></div>
+            <div id="token-display" class="token-display" style="display:none;"></div>
+        </div>
+
+        <div class="step">
+            <h3>Pas 3: Login Utilizator 2</h3>
+            <button onclick="loginUser2()">Login User2</button>
+            <div id="login2-response" class="response" style="display:none;"></div>
+            <div id="token2-display" class="token-display" style="display:none;"></div>
+        </div>
+
+        <div class="step">
+            <h3>Pas 4: Creare Liste</h3>
+            <button onclick="createLists()">Crează Liste</button>
+            <div id="lists-response" class="response" style="display:none;"></div>
+            <div id="listid-display" class="token-display" style="display:none;"></div>
+        </div>
+
+        <div class="step">
+            <h3>Pas 5: Adăugare Articole</h3>
+            <button onclick="addItems()">Adaugă Articole</button>
+            <div id="items-response" class="response" style="display:none;"></div>
+        </div>
+
+        <div class="step">
+            <h3>Pas 6: Partajare Listă</h3>
+            <button onclick="shareList()">Partajează Lista</button>
+            <div id="share-response" class="response" style="display:none;"></div>
+        </div>
+
+        <div class="step">
+            <h3>Selectează listă și operează pe ea</h3>
+            <button onclick="loadLists()">Încarcă liste</button>
+            <select id="list-select" style="display:none; width:100%; margin:10px 0; padding:8px;" onchange="onListSelectChange()"></select>
+            <button onclick="displayItemsForSelectedList()">Afișează articole din lista selectată</button>
+            <button onclick="updateList()">Actualizează Listă</button>
+            <button onclick="deleteList()">Șterge Listă</button>
+            <button onclick="updateItem()">Actualizează Articol</button>
+            <button onclick="deleteItem()">Șterge Articol</button>
+            <div id="list-select-response" class="response" style="display:none;"></div>
+        </div>
+
+        <div class="step">
+            <h3>Operațiuni Avansate</h3>
+            <button onclick="getNotifications()">Obține Notificări</button>
+            <div id="additional-response" class="response" style="display:none;"></div>
+        </div>
+
+    </div>
+
+    <script>
+        let token = '';
+        let token2 = '';
+        let listId = '';
+        let currentLists = [];
+        let currentItems = [];
+
+        const BASE_URL = 'http://localhost:8000';
+
+        function updateStatus(message) {
+            document.getElementById('global-status').textContent = 'Status: ' + message;
+        }
+
+        function showResponse(elementId, response, isSuccess = true) {
+            const element = document.getElementById(elementId);
+            element.style.display = 'block';
+            element.className = 'response ' + (isSuccess ? 'success' : 'error');
+            element.textContent = typeof response === 'string' ? response : JSON.stringify(response, null, 2);
+        }
+
+        async function makeRequest(method, url, data = null, authToken = null) {
+            const headers = {
+                'Content-Type': 'application/json'
+            };
+
+            if (authToken) {
+                headers['Authorization'] = `Bearer ${authToken}`;
+            }
+
+            const config = {
+                method: method,
+                headers: headers
+            };
+
+            if (data) {
+                config.body = JSON.stringify(data);
+            }
+
+            try {
+                const response = await fetch(BASE_URL + url, config);
+                const result = await response.text();
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${result}`);
+                }
+
+                try {
+                    return JSON.parse(result);
+                } catch {
+                    return result;
+                }
+            } catch (error) {
+                throw error;
+            }
+        }
+
+        async function registerUsers() {
+            updateStatus('Înregistrare utilizatori...');
+            try {
+                const user1 = await makeRequest('POST', '/auth/register', {
+                    email: 'user1@example.com',
+                    password: 'password123'
+                });
+
+                const user2 = await makeRequest('POST', '/auth/register', {
+                    email: 'user2@example.com',
+                    password: 'password456'
+                });
+
+                showResponse('register-response', 'Utilizatori înregistrați cu succes');
+                updateStatus('Utilizatori înregistrați');
+            } catch (error) {
+                showResponse('register-response', error.message, false);
+                updateStatus('Eroare la înregistrare');
+            }
+        }
+
+        async function loginUser1() {
+            updateStatus('Login user1...');
+            try {
+                const response = await makeRequest('POST', '/auth/login', {
+                    email: 'user1@example.com',
+                    password: 'password123'
+                });
+
+                token = response.access_token;
+                document.getElementById('token-display').style.display = 'block';
+                document.getElementById('token-display').textContent = `Token User1: ${token}`;
+                showResponse('login1-response', 'Login reușit');
+                updateStatus('User1 autentificat');
+            } catch (error) {
+                showResponse('login1-response', error.message, false);
+                updateStatus('Eroare la login user1');
+            }
+        }
+
+        async function loginUser2() {
+            updateStatus('Login user2...');
+            try {
+                const response = await makeRequest('POST', '/auth/login', {
+                    email: 'user2@example.com',
+                    password: 'password456'
+                });
+
+                token2 = response.access_token;
+                document.getElementById('token2-display').style.display = 'block';
+                document.getElementById('token2-display').textContent = `Token User2: ${token2}`;
+                showResponse('login2-response', 'Login reușit');
+                updateStatus('User2 autentificat');
+            } catch (error) {
+                showResponse('login2-response', error.message, false);
+                updateStatus('Eroare la login user2');
+            }
+        }
+
+        async function createLists() {
+            if (!token) {
+                alert('Trebuie să faci login cu user1 mai întâi!');
+                return;
+            }
+
+            updateStatus('Creare liste...');
+            try {
+                const existingLists = await makeRequest('GET', '/lists', null, token);
+                currentLists = Array.isArray(existingLists) ? existingLists : [];
+
+                const newLists = [
+                    { name: 'Cumparaturi Saptamanale', max_budget: 500.0 },
+                    { name: 'Proiect Casa', max_budget: 2000.0 },
+                ];
+
+                const createdListIds = [];
+                for (const listData of newLists) {
+                    const duplicate = currentLists.find(
+                        (list) => list.name.trim().toLowerCase() === listData.name.trim().toLowerCase()
+                    );
+                    if (duplicate) {
+                        throw new Error(`Lista '${listData.name}' există deja.`);
+                    }
+
+                    const createdList = await makeRequest('POST', '/lists', listData, token);
+                    currentLists.push(createdList);
+                    createdListIds.push(createdList.id);
+
+                    if (!listId) {
+                        listId = createdList.id;
+                        document.getElementById('listid-display').style.display = 'block';
+                        document.getElementById('listid-display').textContent = `List ID: ${listId}`;
+                    }
+                }
+
+                populateListSelect(currentLists);
+                showResponse('lists-response', `Liste create:\n${createdListIds.join('\n')}`);
+                updateStatus('Liste create');
+            } catch (error) {
+                showResponse('lists-response', error.message, false);
+                updateStatus('Eroare la creare liste');
+            }
+        }
+
+        async function addItems() {
+            if (!token || !listId) {
+                alert('Trebuie să creezi liste mai întâi!');
+                return;
+            }
+
+            updateStatus('Adăugare articole...');
+            try {
+                currentItems = await makeRequest('GET', `/lists/${listId}/items`, null, token);
+                currentItems = Array.isArray(currentItems) ? currentItems : [];
+
+                const items = [
+                    { name: 'Lapte 1.5%', quantity: 2, estimated_price: 7.5 },
+                    { name: 'Paine integrala', quantity: 1, estimated_price: 5.0 },
+                    { name: 'Mere Ionatan', quantity: 3, estimated_price: 4.2 },
+                ];
+
+                const duplicates = items.filter((item) =>
+                    currentItems.some(
+                        (existing) => existing.name.trim().toLowerCase() === item.name.trim().toLowerCase()
+                    )
+                );
+
+                if (duplicates.length > 0) {
+                    const duplicateNames = duplicates.map((item) => item.name).join(', ');
+                    throw new Error(`Următoarele articole există deja în listă: ${duplicateNames}`);
+                }
+
+                const results = [];
+                for (const item of items) {
+                    const result = await makeRequest('POST', `/lists/${listId}/items`, item, token);
+                    currentItems.push(result);
+                    results.push(`Adăugat: ${item.name}`);
+                }
+
+                showResponse('items-response', results.join('\n'));
+                updateStatus('Articole adăugate');
+            } catch (error) {
+                showResponse('items-response', error.message, false);
+                updateStatus('Eroare la adăugare articole');
+            }
+        }
+
+        async function shareList() {
+            if (!token || !listId) {
+                alert('Trebuie să creezi liste mai întâi!');
+                return;
+            }
+
+            updateStatus('Partajare listă...');
+            try {
+                const result = await makeRequest('POST', `/lists/${listId}/share`, {
+                    user_email: 'user2@example.com',
+                    role: 'editor'
+                }, token);
+
+                showResponse('share-response', 'Listă partajată cu user2 ca editor');
+                updateStatus('Listă partajată');
+            } catch (error) {
+                showResponse('share-response', error.message, false);
+                updateStatus('Eroare la partajare');
+            }
+        }
+
+        async function runAllSteps() {
+            updateStatus('Rulare pașii inițiali...');
+
+            try {
+                await registerUsers();
+                await loginUser1();
+                await loginUser2();
+                await createLists();
+                await addItems();
+                await shareList();
+
+                updateStatus('Pașii inițiali completați cu succes!');
+            } catch (error) {
+                updateStatus('Eroare în timpul execuției: ' + error.message);
+            }
+        }
+
+        async function getLists() {
+            if (!token) {
+                alert('Trebuie să faci login mai întâi!');
+                return;
+            }
+
+            updateStatus('Obținere liste...');
+            try {
+                const lists = await makeRequest('GET', '/lists', null, token);
+                currentLists = Array.isArray(lists) ? lists : [];
+                populateListSelect(currentLists);
+                showResponse('additional-response', currentLists);
+                updateStatus('Liste obținute');
+            } catch (error) {
+                showResponse('additional-response', error.message, false);
+                updateStatus('Eroare la obținere liste');
+            }
+        }
+
+        function populateListSelect(lists) {
+            const select = document.getElementById('list-select');
+            select.innerHTML = '';
+
+            if (!Array.isArray(lists) || lists.length === 0) {
+                select.style.display = 'none';
+                return;
+            }
+
+            const placeholder = document.createElement('option');
+            placeholder.value = '';
+            placeholder.textContent = 'Alege o listă...';
+            select.appendChild(placeholder);
+
+            for (const list of lists) {
+                const option = document.createElement('option');
+                option.value = list.id;
+                option.textContent = `${list.name} (${list.id})`;
+                select.appendChild(option);
+            }
+
+            select.style.display = 'block';
+        }
+
+        function onListSelectChange() {
+            const selected = document.getElementById('list-select').value;
+            if (selected) {
+                listId = selected;
+                document.getElementById('listid-display').style.display = 'block';
+                document.getElementById('listid-display').textContent = `List ID: ${listId}`;
+            }
+        }
+
+        async function loadLists() {
+            await getLists();
+        }
+
+        async function displayItemsForSelectedList() {
+            if (!token) {
+                alert('Trebuie să faci login mai întâi!');
+                return;
+            }
+
+            if (!listId) {
+                alert('Trebuie să selectezi mai întâi o listă din dropdown!');
+                return;
+            }
+
+            updateStatus('Afișare articole pentru lista selectată...');
+            try {
+                const items = await makeRequest('GET', `/lists/${listId}/items`, null, token);
+                currentItems = Array.isArray(items) ? items : [];
+                showResponse('list-select-response', items);
+                updateStatus('Articole afișate pentru lista selectată');
+            } catch (error) {
+                showResponse('list-select-response', error.message, false);
+                updateStatus('Eroare la afișare articole');
+            }
+        }
+
+        async function getItems() {
+            if (!token || !listId) {
+                alert('Trebuie să creezi și selectezi o listă mai întâi!');
+                return;
+            }
+
+            updateStatus('Obținere articole...');
+            try {
+                const items = await makeRequest('GET', `/lists/${listId}/items`, null, token);
+                showResponse('additional-response', items);
+                updateStatus('Articole obținute');
+            } catch (error) {
+                showResponse('additional-response', error.message, false);
+                updateStatus('Eroare la obținere articole');
+            }
+        }
+
+        async function getNotifications() {
+            if (!token2) {
+                alert('Trebuie să faci login cu user2 mai întâi!');
+                return;
+            }
+
+            updateStatus('Obținere notificări...');
+            try {
+                const notifications = await makeRequest('GET', '/notifications', null, token2);
+                showResponse('additional-response', notifications);
+                updateStatus('Notificări obținute');
+            } catch (error) {
+                showResponse('additional-response', error.message, false);
+                updateStatus('Eroare la obținere notificări');
+            }
+        }
+
+        async function bulkCheckItems() {
+            if (!token || !listId) {
+                alert('Trebuie să creezi o listă mai întâi!');
+                return;
+            }
+
+            updateStatus('Marcare articole...');
+            try {
+                // Marchează toate articolele ca cumpărate
+                const result = await makeRequest('POST', `/lists/${listId}/items/bulk-check`, {
+                    item_ids: [],
+                    checked: true
+                }, token);
+                showResponse('additional-response', 'Articole marcate ca cumpărate');
+                updateStatus('Articole marcate');
+            } catch (error) {
+                showResponse('additional-response', error.message, false);
+                updateStatus('Eroare la marcare articole');
+            }
+        }
+
+        async function updateList() {
+            if (!token || !listId) {
+                alert('Trebuie să selectezi o listă mai întâi!');
+                return;
+            }
+
+            updateStatus('Actualizare listă...');
+            try {
+                const result = await makeRequest('PATCH', `/lists/${listId}`, {
+                    name: 'Cumparaturi Saptamanale - Actualizat',
+                    max_budget: 800.00
+                }, token);
+                showResponse('list-select-response', 'Listă actualizată');
+                updateStatus('Listă actualizată');
+            } catch (error) {
+                showResponse('list-select-response', error.message, false);
+                updateStatus('Eroare la actualizare listă');
+            }
+        }
+
+        async function deleteList() {
+            if (!token || !listId) {
+                alert('Trebuie să selectezi o listă mai întâi!');
+                return;
+            }
+
+            if (!confirm('Ești sigur că vrei să ștergi lista?')) return;
+
+            updateStatus('Ștergere listă...');
+            try {
+                await makeRequest('DELETE', `/lists/${listId}`, null, token);
+                showResponse('list-select-response', 'Listă ștearsă');
+                listId = '';
+                document.getElementById('listid-display').style.display = 'none';
+                updateStatus('Listă ștearsă');
+            } catch (error) {
+                showResponse('list-select-response', error.message, false);
+                updateStatus('Eroare la ștergere listă');
+            }
+        }
+
+        async function updateItem() {
+            if (!token || !listId) {
+                alert('Trebuie să selectezi o listă mai întâi!');
+                return;
+            }
+
+            updateStatus('Actualizare articol...');
+            try {
+                // Presupunem că primul articol are ID-ul cunoscut, sau putem obține lista de articole
+                const items = await makeRequest('GET', `/lists/${listId}/items`, null, token);
+                if (items.length === 0) {
+                    throw new Error('Nu există articole în listă');
+                }
+
+                const firstItemId = items[0].id;
+                const result = await makeRequest('PATCH', `/lists/${listId}/items/${firstItemId}`, {
+                    name: 'Lapte 1.5% - Actualizat',
+                    quantity: 3,
+                    estimated_price: 8.00,
+                    checked: true
+                }, token);
+                showResponse('list-select-response', 'Articol actualizat');
+                updateStatus('Articol actualizat');
+            } catch (error) {
+                showResponse('list-select-response', error.message, false);
+                updateStatus('Eroare la actualizare articol');
+            }
+        }
+
+        async function deleteItem() {
+            if (!token || !listId) {
+                alert('Trebuie să selectezi o listă mai întâi!');
+                return;
+            }
+
+            updateStatus('Ștergere articol...');
+            try {
+                const items = await makeRequest('GET', `/lists/${listId}/items`, null, token);
+                if (items.length === 0) {
+                    throw new Error('Nu există articole în listă');
+                }
+
+                const firstItemId = items[0].id;
+                await makeRequest('DELETE', `/lists/${listId}/items/${firstItemId}`, null, token);
+                showResponse('list-select-response', 'Articol șters');
+                updateStatus('Articol șters');
+            } catch (error) {
+                showResponse('list-select-response', error.message, false);
+                updateStatus('Eroare la ștergere articol');
+            }
+        }
+    </script>
+</body>
+</html>
