@@ -17,7 +17,7 @@
                         <section class="full-panel">
                             <div class="dashboard-section-header">
                                 <h3>Listele mele</h3>
-                                <button type="button" class="view-all-button" onclick="setWorkspaceSection('control-center')">Vezi tot <span>→</span></button>
+                                <button type="button" class="view-all-button" onclick="openMyLists()">Vezi tot <span>→</span></button>
                             </div>
                             <div id="owned-lists-cards" class="dashboard-card-grid">
                                 <div class="empty-state">Autentifică-te și apasă „Reîncarcă dashboard” pentru a vedea listele create de tine.</div>
@@ -41,11 +41,10 @@
                                 <span>◔</span>
                             </div>
                             <div id="recent-activity" class="notification-list">
-                                <div class="empty-state">Încă nu există activitate încărcată în dashboard.</div>
+                                <div class="empty-state">Nu sunt notificări încă.</div>
                             </div>
                             <button type="button" class="mark-all-button" onclick="markAllNotificationsRead()">MARCHEAZĂ TOATE CA CITITE</button>
                         </section>
                     </div>
                 </div>
             </section>
-

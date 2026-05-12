@@ -8,6 +8,8 @@
         let currentNotifications = [];
         let currentMyListItems = [];
         let currentMembers = [];
+        let dismissedBudgetAlertListIds = [];
+        let createListDrawerHideTimeout = null;
         let editingMyListItemId = null;
         let editingMyListDetails = false;
         let showingMyListQuickAddForm = false;
@@ -17,6 +19,7 @@
 
         const BASE_URL = 'http://localhost:8000';
         const SESSION_STORAGE_KEY = 'basketwise.session';
+        const DISMISSED_BUDGET_ALERTS_STORAGE_KEY = 'basketwise.dismissedBudgetAlerts';
 
         function getStoredSession() {
             try {
@@ -52,6 +55,37 @@
             }
         }
 
+        function loadDismissedBudgetAlertListIds() {
+            if (!currentUserId) {
+                dismissedBudgetAlertListIds = [];
+                return;
+            }
+
+            try {
+                const rawValue = window.localStorage.getItem(DISMISSED_BUDGET_ALERTS_STORAGE_KEY);
+                const storedMap = rawValue ? JSON.parse(rawValue) : {};
+                const storedIds = storedMap[currentUserId];
+                dismissedBudgetAlertListIds = Array.isArray(storedIds) ? storedIds : [];
+            } catch {
+                dismissedBudgetAlertListIds = [];
+            }
+        }
+
+        function saveDismissedBudgetAlertListIds() {
+            if (!currentUserId) {
+                return;
+            }
+
+            try {
+                const rawValue = window.localStorage.getItem(DISMISSED_BUDGET_ALERTS_STORAGE_KEY);
+                const storedMap = rawValue ? JSON.parse(rawValue) : {};
+                storedMap[currentUserId] = dismissedBudgetAlertListIds;
+                window.localStorage.setItem(DISMISSED_BUDGET_ALERTS_STORAGE_KEY, JSON.stringify(storedMap));
+            } catch {
+                // Ignore browser storage failures and continue with in-memory state.
+            }
+        }
+
         function resetRuntimeState() {
             token = '';
             token2 = '';
@@ -63,6 +97,7 @@
             currentMyListItems = [];
             currentMembers = [];
             currentNotifications = [];
+            dismissedBudgetAlertListIds = [];
             editingMyListItemId = null;
             editingMyListDetails = false;
             showingMyListQuickAddForm = false;
@@ -91,10 +126,13 @@
         }
 
         function getSectionPath(section) {
+            if (section === 'shared') {
+                section = 'my-lists';
+            }
+
             const sectionMap = {
                 dashboard: '/dashboard',
                 'my-lists': '/my-lists',
-                shared: '/shared',
                 notifications: '/notifications',
                 'control-center': '/control-center',
             };
@@ -127,10 +165,25 @@
             };
         }
 
-        function getCreateListPayload() {
+        function getCreateListFieldIds(source = 'drawer') {
+            if (source !== 'control-center') {
+                return {
+                    name: 'drawer-list-name',
+                    budget: 'drawer-list-budget',
+                };
+            }
+
             return {
-                name: getInputValue('list-name'),
-                max_budget: Number(getInputValue('list-budget')),
+                name: 'list-name',
+                budget: 'list-budget',
+            };
+        }
+
+        function getCreateListPayload(source = 'drawer') {
+            const fieldIds = getCreateListFieldIds(source);
+            return {
+                name: getInputValue(fieldIds.name),
+                max_budget: Number(getInputValue(fieldIds.budget)),
             };
         }
 
@@ -162,6 +215,7 @@
             const registerTab = document.getElementById('register-tab');
             const loginForm = document.getElementById('login-form');
             const registerForm = document.getElementById('register-form');
+            const registerResponse = document.getElementById('register-response');
             const title = document.getElementById('auth-title');
             const subtitle = document.getElementById('auth-subtitle');
             const metaCopy = document.getElementById('auth-meta-copy');
@@ -173,6 +227,11 @@
             registerTab.classList.toggle('active', !isLogin);
             loginForm.classList.toggle('hidden', !isLogin);
             registerForm.classList.toggle('hidden', isLogin);
+            if (registerResponse) {
+                registerResponse.classList.add('hidden');
+                registerResponse.classList.remove('success', 'error');
+                registerResponse.textContent = '';
+            }
 
             title.textContent = isLogin ? 'Bun venit înapoi' : 'Creează cont nou';
             subtitle.textContent = isLogin
@@ -197,6 +256,7 @@
 
         function showWorkspaceForUser(email, preferredSection = INITIAL_PAGE) {
             const displayName = formatDisplayName(email);
+            loadDismissedBudgetAlertListIds();
             document.getElementById('auth-view').classList.add('hidden');
             document.getElementById('workspace').classList.add('active');
             document.getElementById('current-user-display').textContent = email;
@@ -218,15 +278,21 @@
         }
 
         function setWorkspaceSection(section) {
+            if (section === 'shared') {
+                section = 'my-lists';
+            }
+
+            if (section === 'control-center') {
+                section = 'dashboard';
+            }
+
             activeWorkspaceSection = section;
+            closeCreateListDrawer();
             document.getElementById('dashboard-section').classList.toggle('active', section === 'dashboard');
             document.getElementById('my-lists-section').classList.toggle('active', section === 'my-lists');
-            document.getElementById('shared-section').classList.toggle('active', section === 'shared');
             document.getElementById('notifications-section').classList.toggle('active', section === 'notifications');
-            document.getElementById('control-center-section').classList.toggle('active', section === 'control-center');
             document.getElementById('nav-dashboard').classList.toggle('active', section === 'dashboard');
             document.getElementById('nav-my-lists').classList.toggle('active', section === 'my-lists');
-            document.getElementById('nav-shared').classList.toggle('active', section === 'shared');
             document.getElementById('nav-notifications').classList.toggle('active', section === 'notifications');
             window.history.replaceState({}, '', getSectionPath(section));
 
@@ -234,6 +300,72 @@
             if (token && currentUserEmail && currentUserEmail !== 'Niciun utilizator activ') {
                 saveSession(currentUserEmail);
             }
+        }
+
+        function clearCreateListResponse(source = 'drawer') {
+            const responseId = source === 'drawer' ? 'create-list-drawer-response' : 'lists-response';
+            const responseElement = document.getElementById(responseId);
+            if (!responseElement) {
+                return;
+            }
+
+            responseElement.classList.add('hidden');
+            responseElement.classList.remove('success', 'error');
+            responseElement.textContent = '';
+        }
+
+        function resetCreateListForm(source = 'drawer') {
+            const fieldIds = getCreateListFieldIds(source);
+            const nameInput = document.getElementById(fieldIds.name);
+            const budgetInput = document.getElementById(fieldIds.budget);
+
+            if (nameInput) {
+                nameInput.value = '';
+            }
+
+            if (budgetInput) {
+                budgetInput.value = '500';
+            }
+
+            clearCreateListResponse(source);
+        }
+
+        function openCreateListDrawer() {
+            const drawer = document.getElementById('create-list-drawer');
+            if (!drawer) {
+                return;
+            }
+
+            if (createListDrawerHideTimeout) {
+                window.clearTimeout(createListDrawerHideTimeout);
+                createListDrawerHideTimeout = null;
+            }
+            drawer.classList.remove('hidden');
+            drawer.setAttribute('aria-hidden', 'false');
+            requestAnimationFrame(() => {
+                drawer.classList.add('active');
+            });
+            clearCreateListResponse('drawer');
+
+            const nameInput = document.getElementById('drawer-list-name');
+            if (nameInput) {
+                nameInput.focus();
+            }
+        }
+
+        function closeCreateListDrawer() {
+            const drawer = document.getElementById('create-list-drawer');
+            if (!drawer || drawer.classList.contains('hidden')) {
+                return;
+            }
+
+            drawer.classList.remove('active');
+            drawer.setAttribute('aria-hidden', 'true');
+            createListDrawerHideTimeout = window.setTimeout(() => {
+                drawer.classList.add('hidden');
+                createListDrawerHideTimeout = null;
+            }, 220);
+            resetCreateListForm('drawer');
         }
 
         function formatCurrency(value) {
@@ -250,6 +382,40 @@
             return Number.isNaN(numeric) ? 0 : numeric;
         }
 
+        function getBudgetStatusLabel(status) {
+            const labels = {
+                within_budget: 'În limită',
+                near_limit: 'Aproape de limită',
+                over_budget: 'Depășit',
+            };
+            return labels[status] || status || 'Necunoscut';
+        }
+
+        function getBudgetSnapshotMeta(snapshot, fallbackMaxBudget = 0) {
+            const maxBudget = toNumber(snapshot?.max_budget ?? fallbackMaxBudget);
+            const currentTotal = toNumber(snapshot?.current_total);
+            const remainingBudget = snapshot?.remaining_budget !== undefined
+                ? toNumber(snapshot.remaining_budget)
+                : maxBudget - currentTotal;
+            const status = snapshot?.status || (
+                maxBudget <= 0
+                    ? (currentTotal > 0 ? 'over_budget' : 'within_budget')
+                    : (currentTotal > maxBudget ? 'over_budget' : 'within_budget')
+            );
+            const progress = maxBudget > 0 ? Math.min((currentTotal / maxBudget) * 100, 100) : 0;
+
+            return {
+                maxBudget,
+                currentTotal,
+                remainingBudget,
+                status,
+                progress,
+                statusLabel: getBudgetStatusLabel(status),
+                isOverBudget: remainingBudget < 0,
+                trackClass: status === 'over_budget' ? 'over-budget' : '',
+            };
+        }
+
         function getDashboardSearchTerm() {
             return getInputValue('dashboard-search').toLowerCase();
         }
@@ -264,14 +430,50 @@
         }
 
         function focusCreateListForm() {
-            setWorkspaceSection('control-center');
-            document.getElementById('list-name').focus();
+            openCreateListDrawer();
         }
 
-        function markAllNotificationsRead() {
-            currentNotifications = [];
-            renderDashboard(currentLists, currentNotifications);
-            renderNotificationsFeed(currentNotifications, currentLists);
+        function submitCreateListDrawer(event) {
+            event.preventDefault();
+            createList('drawer');
+        }
+
+        async function markAllNotificationsRead() {
+            if (!token) {
+                return;
+            }
+
+            const unreadNotifications = Array.isArray(currentNotifications)
+                ? currentNotifications.filter((notification) => !notification.read)
+                : [];
+
+            if (unreadNotifications.length === 0) {
+                dismissedBudgetAlertListIds = getOverBudgetAlertListIds(currentLists);
+                saveDismissedBudgetAlertListIds();
+                renderDashboard(currentLists, currentNotifications);
+                renderNotificationsFeed(currentNotifications, currentLists);
+                return;
+            }
+
+            try {
+                await Promise.all(
+                    unreadNotifications.map((notification) =>
+                        makeRequest('PATCH', `/notifications/${notification.id}`, null, token)
+                    )
+                );
+
+                currentNotifications = currentNotifications.map((notification) => ({
+                    ...notification,
+                    read: true,
+                }));
+                dismissedBudgetAlertListIds = getOverBudgetAlertListIds(currentLists);
+                saveDismissedBudgetAlertListIds();
+                renderDashboard(currentLists, currentNotifications);
+                renderNotificationsFeed(currentNotifications, currentLists);
+                await refreshDashboard();
+            } catch (error) {
+                console.error('Eroare la marcarea tuturor notificărilor ca citite:', error);
+            }
         }
 
         function toggleAddItemForm() {
@@ -339,6 +541,11 @@
 
         function showResponse(elementId, response, isSuccess = true) {
             const element = document.getElementById(elementId);
+            if (!element) {
+                console.warn(`showResponse: elementul #${elementId} nu există în pagina curentă.`);
+                return;
+            }
+
             element.classList.remove('hidden', 'success', 'error');
             element.classList.add('response', isSuccess ? 'success' : 'error');
             element.textContent = typeof response === 'string' ? response : JSON.stringify(response, null, 2);
@@ -406,6 +613,11 @@
 
         async function initializeApp() {
             setAuthMode('login');
+            document.addEventListener('keydown', (event) => {
+                if (event.key === 'Escape') {
+                    closeCreateListDrawer();
+                }
+            });
 
             const storedSession = getStoredSession();
             if (!storedSession || !storedSession.token || !storedSession.currentUserId || !storedSession.email) {

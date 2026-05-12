@@ -7,31 +7,86 @@
             return lists.filter((list) => (list.name || '').toLowerCase().includes(search));
         }
 
+        async function enrichAccessibleLists(lists) {
+            if (!Array.isArray(lists) || lists.length === 0) {
+                return [];
+            }
+
+            return Promise.all(lists.map(async (list) => {
+                try {
+                    const members = await makeRequest('GET', `/lists/${list.id}/members`, null, token);
+                    const safeMembers = Array.isArray(members) ? members : [];
+                    const owner = safeMembers.find((member) => member.role === 'owner');
+                    const currentMember = safeMembers.find((member) => member.user_id === currentUserId);
+                    const participantEmails = safeMembers
+                        .map((member) => member.email || '')
+                        .filter(Boolean);
+
+                    return {
+                        ...list,
+                        access_role: list.owner_id === currentUserId ? 'owner' : (currentMember?.role || 'viewer'),
+                        owner_email: owner?.email || '',
+                        participant_emails: participantEmails,
+                    };
+                } catch {
+                    return {
+                        ...list,
+                        access_role: list.owner_id === currentUserId ? 'owner' : 'viewer',
+                        participant_emails: [],
+                    };
+                }
+            }));
+        }
+
+        function getDashboardInitials(email) {
+            const displayName = formatDisplayName(email || '');
+            const initials = displayName
+                .split(' ')
+                .filter(Boolean)
+                .slice(0, 2)
+                .map((part) => part[0].toUpperCase())
+                .join('');
+
+            return initials || 'BW';
+        }
+
+        function buildDashboardParticipants(list) {
+            const participantEmails = Array.isArray(list.participant_emails) ? list.participant_emails : [];
+            const visibleParticipants = participantEmails.slice(0, 3);
+            const extraCount = Math.max(participantEmails.length - visibleParticipants.length, 0);
+
+            if (!visibleParticipants.length) {
+                const fallbackEmail = list.owner_email || '';
+                return `
+                    <div class="avatar-stack" aria-label="Participanți indisponibili">
+                        <span class="avatar-chip">${getDashboardInitials(fallbackEmail)}</span>
+                    </div>
+                `;
+            }
+
+            return `
+                <div class="avatar-stack" aria-label="Participanți listă">
+                    ${visibleParticipants.map((email) => `<span class="avatar-chip">${getDashboardInitials(email)}</span>`).join('')}
+                    ${extraCount > 0 ? `<span class="avatar-chip">+${extraCount}</span>` : ''}
+                </div>
+            `;
+        }
+
         function buildListCard(list, type) {
             const itemsCount = Array.isArray(list.items) ? list.items.length : 0;
-            const maxBudget = toNumber(list.max_budget);
-            const estimatedTotal = Array.isArray(list.items)
-                ? list.items.reduce((sum, item) => sum + (toNumber(item.estimated_price) * toNumber(item.quantity || 1)), 0)
-                : 0;
-            const progress = maxBudget > 0 ? Math.min((estimatedTotal / maxBudget) * 100, 100) : 0;
-            const progressLabel = maxBudget > 0
-                ? `${Math.round(progress)}% din buget consumat`
+            const budgetMeta = getBudgetSnapshotMeta(list.budget_snapshot, list.max_budget);
+            const progressLabel = budgetMeta.maxBudget > 0
+                ? `${Math.round(budgetMeta.progress)}% din buget consumat`
                 : 'Fără limită de buget setată';
             const productsLabel = `${itemsCount} ${itemsCount === 1 ? 'produs' : 'produse'}`;
             const badgeClass = type === 'owner' ? 'badge-owner' : 'badge-shared';
-            const badgeText = type === 'owner' ? 'Owner' : 'Editor';
-            const budgetStateClass = estimatedTotal > maxBudget && maxBudget > 0 ? 'over-budget' : '';
+            const sharedRole = list.access_role === 'editor' ? 'EDITOR' : 'VIEWER';
+            const badgeText = type === 'owner' ? 'OWNER' : sharedRole;
+            const budgetStateClass = budgetMeta.trackClass;
             const metaLine = type === 'owner'
                 ? `${productsLabel} • ${list.created_at ? `Actualizat ${new Date(list.created_at).toLocaleDateString('ro-RO')}` : 'Actualizat recent'}`
                 : `${productsLabel} • Partajată în sesiunea curentă`;
-            const peopleMarkup = type === 'shared'
-                ? `
-                    <div class="avatar-stack">
-                        <span class="avatar-chip">MP</span>
-                        <span class="avatar-chip">AP</span>
-                    </div>
-                `
-                : '<span style="opacity:0.7">⋮</span>';
+            const peopleMarkup = buildDashboardParticipants(list);
 
             return `
                 <article class="list-dashboard-card">
@@ -49,10 +104,10 @@
                         <span class="budget-caption">Buget</span>
                         <div class="budget-row">
                             <span class="dashboard-subtle"></span>
-                            <strong class="${budgetStateClass}">${formatCurrency(estimatedTotal)} / ${formatCurrency(maxBudget)}</strong>
+                            <strong class="${budgetStateClass}">${formatCurrency(budgetMeta.currentTotal)} / ${formatCurrency(budgetMeta.maxBudget)}</strong>
                         </div>
                         <div class="budget-track">
-                            <span class="${budgetStateClass}" style="width:${progress}%"></span>
+                            <span class="${budgetStateClass}" style="width:${budgetMeta.progress}%"></span>
                         </div>
                     </div>
                     <div class="budget-row">
@@ -78,9 +133,12 @@
         function renderRecentActivity(notifications, ownedLists, sharedLists) {
             const container = document.getElementById('recent-activity');
             const cards = [];
+            const unreadNotifications = Array.isArray(notifications)
+                ? notifications.filter((notification) => !notification.read)
+                : [];
 
-            if (Array.isArray(notifications) && notifications.length > 0) {
-                for (const notification of notifications.slice(0, 4)) {
+            if (unreadNotifications.length > 0) {
+                for (const notification of unreadNotifications.slice(0, 4)) {
                     cards.push(`
                         <article class="notification-card">
                             <div class="notification-icon primary">🛒</div>
@@ -94,11 +152,8 @@
             }
 
             const overBudgetLists = [...ownedLists, ...sharedLists].filter((list) => {
-                const budget = toNumber(list.max_budget);
-                const estimated = Array.isArray(list.items)
-                    ? list.items.reduce((sum, item) => sum + (toNumber(item.estimated_price) * toNumber(item.quantity || 1)), 0)
-                    : 0;
-                return budget > 0 && estimated > budget;
+                const budgetMeta = getBudgetSnapshotMeta(list.budget_snapshot, list.max_budget);
+                return budgetMeta.status === 'over_budget' && !dismissedBudgetAlertListIds.includes(list.id);
             });
 
             for (const list of overBudgetLists.slice(0, 2)) {
@@ -114,7 +169,7 @@
             }
 
             if (cards.length === 0) {
-                container.innerHTML = '<div class="empty-state">Nu există activitate suficientă încă. Creează sau partajează o listă pentru a popula dashboard-ul.</div>';
+                container.innerHTML = '<div class="empty-state">Nu sunt notificări încă.</div>';
                 return;
             }
 
@@ -126,16 +181,27 @@
             const cards = [];
             const formatted = formatAccessibleLists(lists);
             const allLists = [...formatted.created_by_me, ...formatted.shared_with_me];
+            const unreadNotifications = Array.isArray(notifications)
+                ? notifications.filter((notification) => !notification.read)
+                : [];
 
-            if (Array.isArray(notifications) && notifications.length > 0) {
-                for (const notification of notifications.slice(0, 4)) {
+            if (unreadNotifications.length > 0) {
+                for (const notification of unreadNotifications.slice(0, 4)) {
                     cards.push(`
-                        <article class="notification-feed-card" data-notification-id="${notification.id}" style="cursor: pointer;">
+                        <article class="notification-feed-card" data-notification-id="${notification.id}">
                             <div class="notification-feed-icon primary">👥</div>
                             <div class="notification-feed-body">
                                 <div class="notification-feed-top">
                                     <strong>Actualizare colaborare</strong>
-                                    <span class="notification-time">RECENT</span>
+                                    <div class="notification-feed-actions">
+                                        <span class="notification-time">RECENT</span>
+                                        <button
+                                            type="button"
+                                            class="notification-dismiss-button"
+                                            data-dismiss-notification-id="${notification.id}"
+                                            aria-label="Marchează notificarea ca citită"
+                                        >✕</button>
+                                    </div>
                                 </div>
                                 <p>${notification.message || 'Mesaj indisponibil'}</p>
                             </div>
@@ -145,13 +211,12 @@
             }
 
             for (const list of allLists.slice(0, 3)) {
-                const budget = toNumber(list.max_budget);
-                const estimated = Array.isArray(list.items)
-                    ? list.items.reduce((sum, item) => sum + (toNumber(item.estimated_price) * toNumber(item.quantity || 1)), 0)
-                    : 0;
+                const budgetMeta = getBudgetSnapshotMeta(list.budget_snapshot, list.max_budget);
 
-                if (budget > 0 && estimated > budget) {
-                    const progress = Math.round((estimated / budget) * 100);
+                if (budgetMeta.status === 'over_budget' && !dismissedBudgetAlertListIds.includes(list.id)) {
+                    const progress = budgetMeta.maxBudget > 0
+                        ? Math.round((budgetMeta.currentTotal / budgetMeta.maxBudget) * 100)
+                        : 100;
                     cards.push(`
                         <article class="notification-feed-card error">
                             <div class="notification-feed-icon error">!</div>
@@ -160,7 +225,7 @@
                                     <strong>Alertă Buget Depășit</strong>
                                     <span class="notification-time">ALERTĂ</span>
                                 </div>
-                                <p>Lista <strong>"${list.name}"</strong> a depășit bugetul setat cu <strong>${formatCurrency(estimated - budget)}</strong>.</p>
+                                <p>Lista <strong>"${list.name}"</strong> a depășit bugetul setat cu <strong>${formatCurrency(Math.abs(budgetMeta.remainingBudget))}</strong>.</p>
                                 <div class="notification-progress">
                                     <div class="notification-progress-meta">
                                         <span>PROGRES BUGET</span>
@@ -183,13 +248,14 @@
 
             container.innerHTML = cards.join('');
 
-            // Adaug delegated event listener pentru notificări
-            container.addEventListener('click', async (e) => {
-                const card = e.target.closest('[data-notification-id]');
-                if (card) {
-                    await markNotificationAsRead(card.dataset.notificationId);
+            container.onclick = async (e) => {
+                const dismissButton = e.target.closest('[data-dismiss-notification-id]');
+                if (dismissButton) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    await markNotificationAsRead(dismissButton.dataset.dismissNotificationId);
                 }
-            });
+            };
         }
 
         function renderDashboard(lists, notifications = []) {
@@ -201,7 +267,7 @@
                 'owned-lists-cards',
                 ownedLists,
                 'owner',
-                'Nu ai încă liste create. Poți genera prima listă din Control Center.'
+                'Nu ai încă liste create. Poți genera prima listă din butonul Create New List.'
             );
             renderListCollection(
                 'shared-lists-cards',
@@ -215,11 +281,49 @@
         async function markNotificationAsRead(notificationId) {
             try {
                 await makeRequest('PATCH', `/notifications/${notificationId}`, null, token);
-                // Reîncarcă notificările după marcare
-                await getNotifications();
+                currentNotifications = Array.isArray(currentNotifications)
+                    ? currentNotifications.map((notification) => (
+                        notification.id === notificationId
+                            ? { ...notification, read: true }
+                            : notification
+                    ))
+                    : [];
+                renderDashboard(currentLists, currentNotifications);
+                renderNotificationsFeed(currentNotifications, currentLists);
+                await refreshDashboard();
             } catch (error) {
                 console.error('Eroare la marcare notificare:', error);
             }
+        }
+
+        function getOverBudgetAlertListIds(lists) {
+            const formatted = formatAccessibleLists(lists);
+            const allLists = [...formatted.created_by_me, ...formatted.shared_with_me];
+
+            return allLists
+                .filter((list) => getBudgetSnapshotMeta(list.budget_snapshot, list.max_budget).status === 'over_budget')
+                .map((list) => list.id);
+        }
+
+        async function attachBudgetsToLists(lists) {
+            if (!Array.isArray(lists) || lists.length === 0) {
+                return [];
+            }
+
+            return Promise.all(lists.map(async (list) => {
+                try {
+                    const budgetSnapshot = await makeRequest('GET', `/lists/${list.id}/budget`, null, token);
+                    return {
+                        ...list,
+                        budget_snapshot: budgetSnapshot,
+                    };
+                } catch {
+                    return {
+                        ...list,
+                        budget_snapshot: null,
+                    };
+                }
+            }));
         }
 
         async function attachItemsToLists(lists) {
@@ -252,7 +356,9 @@
 
             try {
                 const lists = await makeRequest('GET', '/lists/accessible', null, token);
-                currentLists = await attachItemsToLists(Array.isArray(lists) ? lists : []);
+                const enrichedLists = await enrichAccessibleLists(Array.isArray(lists) ? lists : []);
+                const listsWithItems = await attachItemsToLists(enrichedLists);
+                currentLists = await attachBudgetsToLists(listsWithItems);
                 populateListSelect(currentLists);
 
                 let notifications = [];
@@ -268,8 +374,6 @@
                 renderNotificationsFeed(currentNotifications, currentLists);
                 if (activeWorkspaceSection === 'my-lists') {
                     await renderMyListsSection(myListId);
-                } else if (activeWorkspaceSection === 'shared') {
-                    await renderSharedSection();
                 }
                 updateStatus('Dashboard actualizat');
             } catch (error) {
@@ -280,7 +384,7 @@
 
                 updateStatus('Eroare la actualizare dashboard');
                 renderRecentActivity([], [], []);
-                showResponse('additional-response', error.message, false);
+                console.error('Eroare la actualizare dashboard:', error);
             }
         }
 

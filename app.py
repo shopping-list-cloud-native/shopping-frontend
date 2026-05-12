@@ -24,7 +24,7 @@ def my_lists():
 
 @app.route("/shared")
 def shared():
-    return render_app("shared")
+    return render_app("my-lists")
 
 
 @app.route("/notifications")
