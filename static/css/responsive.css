@@ -15,14 +15,28 @@
             .dashboard-card-grid,
             .shared-card-grid,
             .shared-grid,
+            .spending-analysis-grid,
             .collab-grid {
                 grid-template-columns: 1fr;
+            }
+
+            .create-list-drawer {
+                grid-template-columns: minmax(0, 1fr) minmax(320px, 420px);
             }
 
             .my-list-header,
             .budget-hero-head {
                 flex-direction: column;
                 align-items: flex-start;
+            }
+
+            .my-list-comment-stage-copy {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
+            .my-list-comment-stage-copy span {
+                text-align: left;
             }
         }
 
@@ -59,8 +73,10 @@
 
             .my-list-toolbar {
                 justify-content: stretch;
+                align-items: stretch;
             }
 
+    .my-list-active-count,
     .my-list-picker {
         min-width: 100%;
         max-width: 100%;
@@ -75,5 +91,18 @@
     .my-list-budget-input {
         width: 100%;
         text-align: left;
+    }
+
+    .create-list-drawer {
+        grid-template-columns: 1fr;
+    }
+
+    .create-list-drawer-backdrop {
+        display: none;
+    }
+
+    .create-list-drawer-panel {
+        width: min(100vw, 100%);
+        padding: 24px;
     }
 }

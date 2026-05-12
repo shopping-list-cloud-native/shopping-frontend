@@ -1,16 +1,27 @@
-        .my-list-shell {
-            width: 100%;
-            max-width: 980px;
-            margin: 0 auto;
-            display: grid;
-            gap: 28px;
-        }
+.my-list-shell {
+    width: 100%;
+    max-width: 980px;
+    margin: 0 auto;
+    display: grid;
+    gap: 28px;
+}
 
         .my-list-toolbar {
             display: flex;
-            justify-content: flex-end;
+            justify-content: space-between;
+            align-items: center;
             gap: 12px;
             flex-wrap: wrap;
+        }
+
+        .my-list-active-count {
+            border-radius: 999px;
+            background: #e7efe9;
+            color: var(--primary-dark);
+            padding: 10px 16px;
+            font-size: 14px;
+            font-weight: 800;
+            letter-spacing: 0.01em;
         }
 
         .my-list-picker {
@@ -93,6 +104,21 @@
 
 .icon-action:hover {
     background: #f3f4f5;
+}
+
+.icon-action-active {
+    background: rgba(11, 123, 86, 0.12);
+    color: var(--primary);
+}
+
+.icon-action-editing {
+    background: var(--primary);
+    color: #ffffff;
+}
+
+.icon-action-editing:hover {
+    background: var(--primary-dark);
+    color: #ffffff;
 }
 
 .icon-action-danger:hover {
@@ -203,6 +229,33 @@
             color: #3d4a42;
         }
 
+        .my-list-bulk-toggle {
+            margin-top: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: flex-start;
+            gap: 12px;
+            border: none;
+            background: transparent;
+            padding: 0;
+            cursor: pointer;
+            text-align: left;
+        }
+
+        .my-list-bulk-toggle .check-visual {
+            pointer-events: none;
+        }
+
+        .my-list-bulk-toggle-text {
+            color: #4d5a51;
+            font-size: 14px;
+            font-weight: 800;
+        }
+
+        .my-list-bulk-toggle.checked .my-list-bulk-toggle-text {
+            color: var(--primary);
+        }
+
         .budget-hero-foot .positive {
             color: var(--primary);
             font-weight: 700;
@@ -216,6 +269,305 @@
 .my-list-category {
     display: grid;
     gap: 12px;
+}
+
+.my-list-comment-stage {
+    display: grid;
+    gap: 22px;
+}
+
+.my-list-comment-stage.comment-mode {
+    cursor: crosshair;
+}
+
+.my-list-comment-stage-copy {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    padding: 12px 16px;
+    border-radius: 16px;
+    background: rgba(231, 239, 233, 0.7);
+    color: #3d4a42;
+}
+
+.my-list-comment-stage-copy strong {
+    font-size: 14px;
+}
+
+.my-list-comment-stage-copy span {
+    font-size: 13px;
+    line-height: 1.5;
+    text-align: right;
+}
+
+.my-list-comment-content {
+    display: grid;
+    gap: 20px;
+    z-index: 1;
+}
+
+.my-list-comment-overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 5;
+    display: none;
+    border-radius: 32px;
+}
+
+.my-list-comment-overlay.active {
+    display: block;
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.my-list-comment-selection {
+    position: absolute;
+    z-index: 6;
+    border: 2px dashed rgba(11, 123, 86, 0.8);
+    border-radius: 16px;
+    background: rgba(11, 123, 86, 0.12);
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.55) inset;
+    pointer-events: none;
+}
+
+.my-list-comment-note,
+.my-list-comment-draft {
+    position: absolute;
+    z-index: 4;
+    min-width: 80px;
+    min-height: 48px;
+    overflow: hidden;
+}
+
+.my-list-comment-note {
+    pointer-events: auto;
+    cursor: default;
+}
+
+.my-list-comment-note[onmousedown] {
+    cursor: grab;
+}
+
+.my-list-comment-note[onmousedown]:active {
+    cursor: grabbing;
+}
+
+.my-list-comment-note.readonly {
+    cursor: default;
+}
+
+.my-list-comment-draft {
+    z-index: 8;
+}
+
+.my-list-comment-note-shell,
+.my-list-comment-draft-shell {
+    width: 100%;
+    height: 100%;
+    border-radius: 18px;
+    border: 1px solid rgba(11, 123, 86, 0.14);
+    background: rgba(255, 255, 255, 0.9);
+    box-shadow: 0 14px 36px rgba(30, 54, 43, 0.14);
+    backdrop-filter: blur(12px);
+}
+
+.my-list-comment-note-shell {
+    display: grid;
+    grid-template-rows: auto 1fr;
+}
+
+.my-list-comment-note-handle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 4px;
+    padding: 3px 8px;
+    border-bottom: 1px solid rgba(11, 123, 86, 0.1);
+    background: rgba(11, 123, 86, 0.05);
+}
+
+.my-list-comment-note-handle.draft {
+    border-bottom: 1px solid rgba(11, 123, 86, 0.1);
+}
+
+.my-list-comment-note-kicker {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+}
+
+.my-list-comment-note-drag {
+    color: var(--primary);
+    font-size: 9px;
+    line-height: 1;
+    letter-spacing: -0.2em;
+}
+
+.my-list-comment-note-controls {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.my-list-comment-control {
+    border: 1px solid rgba(85, 98, 72, 0.22);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.82);
+    color: #556248;
+    width: 18px;
+    height: 18px;
+    font-size: 9px;
+    font-weight: 800;
+    cursor: pointer;
+    padding: 0;
+}
+
+.my-list-comment-control.danger:hover {
+    color: var(--danger);
+    border-color: rgba(186, 26, 26, 0.25);
+}
+
+.my-list-comment-control.success {
+    color: #ffffff;
+    background: var(--primary);
+    border-color: var(--primary);
+}
+
+.my-list-comment-control.success:hover {
+    background: var(--primary-dark);
+    border-color: var(--primary-dark);
+}
+
+.my-list-comment-note-label,
+.my-list-comment-draft-label {
+    font-size: 11px;
+    line-height: 14px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--primary);
+}
+
+.my-list-comment-note-body {
+    padding: 10px 12px 10px;
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+}
+
+.my-list-comment-note-avatar {
+    width: 28px;
+    height: 28px;
+    flex: 0 0 28px;
+    border-radius: 999px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: #dbe1ff;
+    color: #003ea8;
+    font-size: 13px;
+    line-height: 1;
+    font-weight: 800;
+    border: 1px solid rgba(0, 62, 168, 0.12);
+}
+
+.my-list-comment-note-copy {
+    min-width: 0;
+    flex: 1;
+    display: grid;
+    gap: 4px;
+}
+
+.my-list-comment-note-headline {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 6px;
+}
+
+.my-list-comment-note-headline strong {
+    color: var(--primary);
+    font-size: 14px;
+    line-height: 1.2;
+}
+
+.my-list-comment-note-headline small {
+    color: #6d7a72;
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+.my-list-comment-note-shell p {
+    margin: 0;
+    color: #1f2a1f;
+    font-size: 14px;
+    line-height: 1.35;
+    white-space: pre-wrap;
+    overflow: auto;
+}
+
+.my-list-comment-draft-shell {
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    gap: 10px;
+    overflow: hidden;
+}
+
+.my-list-comment-draft textarea {
+    width: 100%;
+    min-height: 0;
+    height: 100%;
+    resize: none;
+    border: none;
+    border-radius: 0;
+    background: transparent;
+    color: var(--text);
+    padding: 2px 16px 0;
+    outline: none;
+    font: inherit;
+    line-height: 1.5;
+    overflow: auto;
+}
+
+.my-list-comment-draft textarea:focus {
+    box-shadow: none;
+}
+
+.my-list-comment-note.collapsed {
+    min-width: clamp(28px, 4vw, 36px) !important;
+    min-height: clamp(28px, 4vw, 36px) !important;
+    width: clamp(28px, 4vw, 36px) !important;
+    height: clamp(28px, 4vw, 36px) !important;
+    cursor: pointer;
+    border-radius: 999px;
+    background: transparent;
+}
+
+.my-list-comment-note.collapsed .my-list-comment-note-shell {
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    border-radius: 999px;
+    background: #ffffff;
+    border: 2px solid #003ea8;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #003ea8;
+    font-weight: 800;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.my-list-comment-collapsed-initials {
+    font-size: clamp(12px, 1.8vw, 15px);
+    line-height: 1;
+}
+
+.my-list-comment-note.collapsed .my-list-comment-note-shell::after {
+    display: none;
 }
 
         .my-list-category-title {
@@ -445,7 +797,77 @@
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 18px;
-    max-width: 940px;
+    width: 100%;
+}
+
+.spending-analysis-card {
+    margin-top: 20px;
+    width: 100%;
+    border-radius: 24px;
+    border: 1px solid #d6e0d8;
+    background: linear-gradient(180deg, #ffffff 0%, #f5f8f6 100%);
+    padding: 22px 24px;
+    display: grid;
+    gap: 18px;
+    box-shadow: 0 12px 30px rgba(44, 62, 51, 0.08);
+}
+
+.spending-analysis-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+}
+
+.spending-analysis-header h4 {
+    margin: 4px 0 0;
+    font-size: 24px;
+    line-height: 1.1;
+}
+
+.spending-analysis-currency {
+    border-radius: 999px;
+    background: #e3efe6;
+    color: var(--primary-dark);
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 8px 12px;
+}
+
+.spending-analysis-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 14px;
+}
+
+.spending-stat {
+    border-radius: 18px;
+    background: #ffffff;
+    border: 1px solid #e2e8e3;
+    padding: 16px 18px;
+    display: grid;
+    gap: 6px;
+}
+
+.spending-stat span {
+    color: #617066;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.spending-stat strong {
+    font-size: 20px;
+    line-height: 1.15;
+}
+
+.spending-stat small {
+    color: #617066;
+    font-size: 13px;
+    font-weight: 700;
 }
 
         .collab-card {
@@ -496,6 +918,21 @@
 
         .quick-add-button:hover {
             background: var(--primary-dark);
+        }
+
+        .quick-add-button.secondary {
+            background: transparent;
+            border: 1px solid #97aa9b;
+            color: var(--text);
+        }
+
+        .quick-add-button.secondary:hover {
+            background: #dfe7e1;
+        }
+
+        .quick-actions {
+            display: grid;
+            gap: 10px;
         }
 
 
@@ -718,6 +1155,11 @@
             background: var(--danger);
         }
 
+        .shared-detail-actions {
+            display: flex;
+            justify-content: flex-end;
+        }
+
         .shared-empty {
             padding: 28px;
             border-radius: 24px;
@@ -819,6 +1261,12 @@
             margin-bottom: 6px;
         }
 
+        .notification-feed-actions {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+        }
+
         .notification-feed-top strong {
             font-size: 18px;
             line-height: 24px;
@@ -836,6 +1284,28 @@
             margin: 0;
             color: #3d4a42;
             line-height: 1.6;
+        }
+
+        .notification-dismiss-button {
+            width: 28px;
+            height: 28px;
+            border: 1px solid #bccac0;
+            border-radius: 999px;
+            background: #ffffff;
+            color: #6d7a72;
+            font-weight: 800;
+            line-height: 1;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+        }
+
+        .notification-dismiss-button:hover {
+            background: #f3f4f5;
+            color: #191c1d;
+            border-color: #6d7a72;
         }
 
         .notification-actions {
@@ -915,7 +1385,6 @@
             margin-left: 0;
         }
 
-        /* Modal pentru gestionarea utilizatorilor */
         .members-modal {
             position: fixed;
             top: 0;
@@ -1000,6 +1469,16 @@
 
         .members-modal-footer button {
             flex: 1;
+        }
+
+        .shared-list-modal-content {
+            max-width: 860px;
+        }
+
+        .shared-list-modal-summary {
+            display: grid;
+            gap: 18px;
+            margin-bottom: 24px;
         }
 
         .member-item {

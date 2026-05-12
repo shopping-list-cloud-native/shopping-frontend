@@ -2,23 +2,18 @@
             try {
                 const user1Credentials = getUser1Credentials();
                 validateCredentials(user1Credentials, 'utilizatorul');
+                showResponse('register-response', '', true);
+                document.getElementById('register-response').classList.add('hidden');
 
-                const response = await makeRequest('POST', '/auth/register', {
+                await makeRequest('POST', '/auth/register', {
                     email: user1Credentials.email,
                     password: user1Credentials.password
                 });
 
-                showResponse('register-response', {
-                    message: 'Utilizator înregistrat cu succes',
-                    user: {
-                        id: response.id,
-                        email: response.email
-                    }
-                });
-                setAuthMode('login');
+                showResponse('register-response', 'Utilizator înregistrat cu succes. Te poți autentifica acum.');
             } catch (error) {
                 if (error.message.includes('already exists')) {
-                    showResponse('register-response', 'Utilizatorul există deja', false);
+                    showResponse('register-response', 'Utilizatorul există deja.', false);
                 } else {
                     showResponse('register-response', error.message, false);
                 }
@@ -38,20 +33,12 @@
                 token = response.access_token;
                 currentUserId = response.user.id;
                 document.getElementById('token-display').textContent = token;
-                showResponse('login1-response', {
-                    message: 'Login reușit',
-                    user: {
-                        id: response.user.id,
-                        email: response.user.email
-                    },
-                    token_type: response.token_type
-                });
                 showWorkspaceForUser(response.user.email);
                 saveSession(response.user.email);
                 updateStatus('Utilizator autentificat');
                 refreshDashboard();
             } catch (error) {
-                showResponse('login1-response', error.message, false);
+                alert(error.message);
             }
         }
 
@@ -68,15 +55,14 @@
 
                 token2 = response.access_token;
                 document.getElementById('token2-display').textContent = token2;
-                showResponse('login2-response', 'Login reușit');
                 updateStatus('User2 autentificat');
             } catch (error) {
-                showResponse('login2-response', error.message, false);
+                alert(error.message);
                 updateStatus('Eroare la login user2');
             }
         }
 
-        async function createList() {
+        async function createList(source = 'drawer') {
             if (!token) {
                 alert('Trebuie să faci login mai întâi.');
                 return;
@@ -84,11 +70,16 @@
 
             updateStatus('Creare listă...');
             try {
-                const newList = getCreateListPayload();
+                const fieldIds = getCreateListFieldIds(source);
+                const responseId = source === 'drawer' ? 'create-list-drawer-response' : 'lists-response';
+                const budgetRawValue = getInputValue(fieldIds.budget);
+                const newList = getCreateListPayload(source);
+
+                clearCreateListResponse(source);
                 if (!newList.name) {
                     throw new Error('Completează numele listei.');
                 }
-                if (Number.isNaN(newList.max_budget)) {
+                if (!budgetRawValue || Number.isNaN(newList.max_budget) || newList.max_budget < 0) {
                     throw new Error('Completează un max budget valid.');
                 }
 
@@ -105,16 +96,21 @@
                 const createdList = await makeRequest('POST', '/lists', newList, token);
                 currentLists.push(createdList);
                 listId = createdList.id;
-                document.getElementById('listid-display').classList.remove('hidden');
-                document.getElementById('listid-display').textContent = `List ID: ${listId}`;
+                if (source === 'control-center') {
+                    document.getElementById('listid-display').classList.remove('hidden');
+                    document.getElementById('listid-display').textContent = `List ID: ${listId}`;
+                }
 
                 populateListSelect(currentLists);
-                showResponse('lists-response', createdList);
+                showResponse(responseId, createdList);
                 updateStatus('Listă creată');
                 refreshDashboard();
+                if (source === 'drawer') {
+                    closeCreateListDrawer();
+                }
                 openMyLists(createdList.id);
             } catch (error) {
-                showResponse('lists-response', error.message, false);
+                showResponse(source === 'drawer' ? 'create-list-drawer-response' : 'lists-response', error.message, false);
                 updateStatus('Eroare la creare listă');
             }
         }
@@ -234,6 +230,10 @@
 
         function populateListSelect(lists) {
             const select = document.getElementById('list-select');
+            if (!select) {
+                return;
+            }
+
             select.innerHTML = '';
 
             if (!Array.isArray(lists) || lists.length === 0) {
@@ -257,7 +257,12 @@
         }
 
         function onListSelectChange() {
-            const selected = document.getElementById('list-select').value;
+            const select = document.getElementById('list-select');
+            if (!select) {
+                return;
+            }
+
+            const selected = select.value;
             if (selected) {
                 listId = selected;
             }
@@ -327,10 +332,11 @@
             try {
                 const name = getInputValue('update-list-name');
                 const budgetRaw = getInputValue('update-list-budget');
-                const payload = {};
+                let listResponse = null;
+                let budgetResponse = null;
 
                 if (name) {
-                    payload.name = name;
+                    listResponse = await makeRequest('PATCH', `/lists/${listId}`, { name }, token);
                 }
 
                 if (budgetRaw) {
@@ -338,15 +344,14 @@
                     if (Number.isNaN(parsedBudget) || parsedBudget < 0) {
                         throw new Error('Completează un max budget valid.');
                     }
-                    payload.max_budget = parsedBudget;
+                    budgetResponse = await makeRequest('PATCH', `/lists/${listId}/budget`, { max_budget: parsedBudget }, token);
                 }
 
-                if (Object.keys(payload).length === 0) {
+                if (!name && !budgetRaw) {
                     throw new Error('Completează cel puțin un câmp pentru actualizare.');
                 }
 
-                const result = await makeRequest('PATCH', `/lists/${listId}`, payload, token);
-                showResponse('list-select-response', result);
+                showResponse('list-select-response', budgetResponse || listResponse || 'Listă actualizată');
                 updateStatus('Listă actualizată');
                 refreshDashboard();
                 if (activeWorkspaceSection === 'my-lists') {
@@ -472,6 +477,11 @@
                 return;
             }
 
+            if (!canEditCurrentListItems(getAccessibleMyListById())) {
+                updateStatus('Nu ai permisiunea să modifici produsele din această listă');
+                return;
+            }
+
             try {
                 await makeRequest('DELETE', `/lists/${myListId}/items/${itemId}`, null, token);
                 await renderMyListsSection(myListId);
@@ -484,6 +494,11 @@
 
         async function toggleMyListItemChecked(itemId, checked) {
             if (!token || !myListId) {
+                return;
+            }
+
+            if (!canEditCurrentListItems(getAccessibleMyListById())) {
+                updateStatus('Nu ai permisiunea să modifici produsele din această listă');
                 return;
             }
 
@@ -501,6 +516,11 @@
         }
 
         async function startMyListItemEdit(itemId) {
+            if (!canEditCurrentListItems(getAccessibleMyListById())) {
+                updateStatus('Nu ai permisiunea să editezi produsele din această listă');
+                return;
+            }
+
             editingMyListItemId = itemId;
             showingMyListQuickAddForm = false;
             await renderMyListsSection(myListId);
@@ -520,6 +540,11 @@
 
         async function saveMyListItemEdit(itemId) {
             if (!token || !myListId) {
+                return;
+            }
+
+            if (!canEditCurrentListItems(getAccessibleMyListById())) {
+                updateStatus('Nu ai permisiunea să editezi produsele din această listă');
                 return;
             }
 
@@ -574,29 +599,42 @@
             updateMyListDetails();
         }
 
-        async function updateMyListDetails() {
+        async function updateMyListDetails(options = {}) {
+            const { exitIfUnchanged = false } = options;
             if (!token || !myListId) {
+                return;
+            }
+
+            if (!canManageCurrentList(getAccessibleMyListById())) {
+                updateStatus('Doar proprietarul poate modifica setările listei');
                 return;
             }
 
             const name = getInputValue('my-list-name-input');
             const budgetRaw = getInputValue('my-list-budget-input');
-            const payload = {};
-
-            if (name) {
-                payload.name = name;
-            }
+            const currentList = getAccessibleMyListById();
+            const normalizedCurrentName = (currentList?.name || '').trim();
+            const budgetMeta = getBudgetSnapshotMeta(currentList?.budget_snapshot, currentList?.max_budget);
+            const normalizedInputName = name.trim();
+            const hasNameChange = Boolean(normalizedInputName) && normalizedInputName !== normalizedCurrentName;
+            let hasBudgetChange = false;
+            let parsedBudget = null;
 
             if (budgetRaw !== '') {
-                const parsedBudget = Number(budgetRaw);
+                parsedBudget = Number(budgetRaw);
                 if (Number.isNaN(parsedBudget) || parsedBudget < 0) {
                     updateStatus('Buget invalid');
                     return;
                 }
-                payload.max_budget = parsedBudget;
+                hasBudgetChange = parsedBudget !== budgetMeta.maxBudget;
             }
 
-            if (!payload.name && payload.max_budget === undefined) {
+            if (!hasNameChange && !hasBudgetChange) {
+                if (exitIfUnchanged) {
+                    editingMyListDetails = false;
+                    await renderMyListsSection(myListId);
+                    return;
+                }
                 updateStatus('Completează un nume sau un buget nou');
                 return;
             }
@@ -604,7 +642,12 @@
             updateStatus('Se actualizează lista...');
 
             try {
-                await makeRequest('PATCH', `/lists/${myListId}`, payload, token);
+                if (hasNameChange) {
+                    await makeRequest('PATCH', `/lists/${myListId}`, { name: normalizedInputName }, token);
+                }
+                if (hasBudgetChange) {
+                    await makeRequest('PATCH', `/lists/${myListId}/budget`, { max_budget: parsedBudget }, token);
+                }
                 editingMyListDetails = false;
                 await refreshDashboard();
                 await renderMyListsSection(myListId);
@@ -620,6 +663,11 @@
                 return;
             }
 
+            if (!canManageCurrentList(getAccessibleMyListById())) {
+                updateStatus('Doar proprietarul poate șterge lista');
+                return;
+            }
+
             listId = myListId;
             await deleteList();
         }
@@ -631,6 +679,11 @@
 
         async function addItemFromMyListPanel() {
             if (!token || !myListId) {
+                return;
+            }
+
+            if (!canEditCurrentListItems(getAccessibleMyListById())) {
+                updateStatus('Nu ai permisiunea să adaugi produse în această listă');
                 return;
             }
 
@@ -689,5 +742,63 @@
             } catch (error) {
                 updateStatus('Eroare la adăugare produs');
                 showResponse('list-select-response', error.message, false);
+            }
+        }
+
+        async function bulkCheckMyListItems(checked) {
+            if (!token || !myListId) {
+                return;
+            }
+
+            if (!canEditCurrentListItems(getAccessibleMyListById())) {
+                updateStatus('Nu ai permisiunea să modifici produsele din această listă');
+                return;
+            }
+
+            updateStatus(checked ? 'Se bifează toate produsele...' : 'Se debifează toate produsele...');
+
+            try {
+                await makeRequest('POST', `/lists/${myListId}/items/bulk-check?checked=${checked ? 'true' : 'false'}`, null, token);
+                editingMyListItemId = null;
+                showingMyListQuickAddForm = false;
+                await refreshDashboard();
+                await renderMyListsSection(myListId);
+                updateStatus(checked ? 'Toate produsele au fost bifate' : 'Toate produsele au fost debifate');
+            } catch (error) {
+                updateStatus('Eroare la actualizarea produselor');
+                alert(error.message);
+            }
+        }
+
+        async function leaveCurrentSharedList() {
+            if (!token || !myListId) {
+                return;
+            }
+
+            const currentList = getAccessibleMyListById();
+            if (canManageCurrentList(currentList)) {
+                updateStatus('Proprietarul nu poate părăsi propria listă');
+                return;
+            }
+
+            if (!confirm('Vrei să ieși din această listă partajată?')) {
+                return;
+            }
+
+            updateStatus('Se părăsește lista...');
+
+            try {
+                await makeRequest('DELETE', `/lists/${myListId}/leave`, null, token);
+                editingMyListDetails = false;
+                editingMyListItemId = null;
+                showingMyListQuickAddForm = false;
+                myListId = '';
+                listId = '';
+                await refreshDashboard();
+                await openMyLists();
+                updateStatus('Ai ieșit din lista partajată');
+            } catch (error) {
+                updateStatus('Eroare la părăsirea listei');
+                alert(error.message);
             }
         }
