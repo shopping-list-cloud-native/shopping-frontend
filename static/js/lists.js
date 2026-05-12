@@ -92,7 +92,6 @@
         function buildMyListItem(item, index, completed = false, canEditItems = true) {
             const quantity = toNumber(item.quantity) || 1;
             const estimatedPrice = toNumber(item.estimated_price);
-            const dragging = !completed && index === 2;
             const quantityLabel = `${quantity} buc.`;
             const nextCheckedState = !Boolean(item.checked);
             const isEditing = canEditItems && editingMyListItemId === item.id;
@@ -161,7 +160,7 @@
                 : '';
 
             return `
-                <article class="my-list-item ${completed ? 'completed' : ''} ${dragging ? 'dragging' : ''}">
+                <article class="my-list-item ${completed ? 'completed' : ''}">
                     <span class="drag-dot">${completed ? '' : '⋮'}</span>
                     ${checkboxMarkup}
                     <div class="my-list-item-body">

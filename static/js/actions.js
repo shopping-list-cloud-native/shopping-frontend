@@ -97,8 +97,11 @@
                 currentLists.push(createdList);
                 listId = createdList.id;
                 if (source === 'control-center') {
-                    document.getElementById('listid-display').classList.remove('hidden');
-                    document.getElementById('listid-display').textContent = `List ID: ${listId}`;
+                    const listIdDisplay = document.getElementById('listid-display');
+                    if (listIdDisplay) {
+                        listIdDisplay.classList.remove('hidden');
+                        listIdDisplay.textContent = `List ID: ${listId}`;
+                    }
                 }
 
                 populateListSelect(currentLists);
@@ -373,15 +376,25 @@
 
             updateStatus('Ștergere listă...');
             try {
+                const deletedListId = listId;
                 await makeRequest('DELETE', `/lists/${listId}`, null, token);
                 showResponse('list-select-response', 'Listă ștearsă');
                 listId = '';
-                document.getElementById('listid-display').classList.add('hidden');
-                updateStatus('Listă ștearsă');
-                refreshDashboard();
-                if (activeWorkspaceSection === 'my-lists') {
-                    setWorkspaceSection('dashboard');
+                currentLists = Array.isArray(currentLists)
+                    ? currentLists.filter((entry) => entry.id !== deletedListId)
+                    : currentLists;
+                if (myListId === deletedListId) {
+                    myListId = '';
                 }
+                const listIdDisplay = document.getElementById('listid-display');
+                if (listIdDisplay) {
+                    listIdDisplay.classList.add('hidden');
+                }
+                updateStatus('Listă ștearsă');
+                if (activeWorkspaceSection === 'my-lists') {
+                    await renderMyListsSection();
+                }
+                await refreshDashboard();
             } catch (error) {
                 showResponse('list-select-response', error.message, false);
                 updateStatus('Eroare la ștergere listă');
